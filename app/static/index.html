@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loop Engine Debate</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail">
+        <p class="brand">Loop Engine</p>
+        <h1>Live debate</h1>
+        <p class="lede">
+          Writer drafts. Critic pushes back. You watch both sides as each turn lands.
+        </p>
+        <form id="start-form">
+          <label for="problem">Your problem</label>
+          <textarea id="problem" rows="7" required placeholder="Describe the problem…"></textarea>
+          <button type="submit" id="run-btn">Start debate</button>
+        </form>
+        <p id="status-line" class="status">Waiting to start</p>
+        <p id="round-pill" class="pill">No round yet</p>
+      </aside>
+
+      <main class="stage">
+        <section class="lane writer-lane">
+          <header>
+            <span class="dot writer-dot"></span>
+            <div>
+              <h2>Writer</h2>
+              <p>Proposes and revises the solution</p>
+            </div>
+          </header>
+          <div id="writer-col" class="messages"></div>
+        </section>
+        <section class="lane critic-lane">
+          <header>
+            <span class="dot critic-dot"></span>
+            <div>
+              <h2>Critic</h2>
+              <p>Stress-tests every claim</p>
+            </div>
+          </header>
+          <div id="critic-col" class="messages"></div>
+        </section>
+        <section id="final" class="verdict hidden"></section>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
