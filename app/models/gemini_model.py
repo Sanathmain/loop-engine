@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.models.base import AIModel
+
+logger = logging.getLogger("loop_engine.gemini")
 
 GEMINI_GENERATE_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -21,6 +26,8 @@ _JSON_TO_GEMINI_TYPE = {
     "null": "NULL",
 }
 
+_RETRY_STATUS = {429, 500, 503}
+
 
 class GeminiModel(AIModel):
     """Gemini adapter via the public REST API (no extra native deps)."""
@@ -30,10 +37,15 @@ class GeminiModel(AIModel):
         api_key: str,
         model_name: str = "gemini-3.1-pro-preview",
         http_client: Any | None = None,
+        timeout_seconds: float = 180.0,
+        max_retries: int = 2,
     ) -> None:
         self.api_key = api_key
         self.model_name = model_name
         self._http_client = http_client
+        self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
+        self.last_call_stats: dict[str, Any] = {}
 
     async def generate(
         self,
@@ -44,34 +56,115 @@ class GeminiModel(AIModel):
         payload: dict[str, Any] = {"contents": contents}
         if system_instruction:
             payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        generation_config: dict[str, Any] = {
+            # Slightly higher temperature reduces near-identical Continue drafts.
+            "temperature": 0.9,
+        }
         if response_model is not None:
-            payload["generationConfig"] = {
-                "responseMimeType": "application/json",
-                "responseSchema": _pydantic_to_gemini_schema(response_model),
-            }
+            generation_config["responseMimeType"] = "application/json"
+            generation_config["responseSchema"] = _pydantic_to_gemini_schema(
+                response_model
+            )
+        payload["generationConfig"] = generation_config
 
-        data = await self._post(payload)
+        started = time.perf_counter()
+        data = await self._post_with_retries(payload)
         text = _extract_text(data)
+        usage = data.get("usageMetadata") or {}
+        self.last_call_stats = {
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+            "tokens": usage.get("totalTokenCount"),
+            "prompt_tokens": usage.get("promptTokenCount"),
+            "response_tokens": usage.get("candidatesTokenCount"),
+        }
+
         if response_model is None:
             return text
         if not text.strip():
             raise ValueError("Gemini returned an empty response")
+
+        try:
+            return response_model.model_validate_json(_strip_json_fences(text))
+        except ValidationError as exc:
+            repaired = await self._repair_validation(
+                payload=payload,
+                response_model=response_model,
+                bad_text=text,
+                error=exc,
+            )
+            return repaired
+
+    async def _repair_validation(
+        self,
+        *,
+        payload: dict[str, Any],
+        response_model: type[BaseModel],
+        bad_text: str,
+        error: ValidationError,
+    ) -> BaseModel:
+        repair_payload = dict(payload)
+        contents = list(repair_payload.get("contents") or [])
+        contents.append(
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": (
+                            "Your previous JSON was rejected by schema validation.\n"
+                            f"Validation error:\n{error}\n\n"
+                            f"Invalid JSON:\n{bad_text}\n\n"
+                            "Return corrected JSON that fully matches the schema. "
+                            "confidence must be between 0.0 and 1.0, not a percentage."
+                        )
+                    }
+                ],
+            }
+        )
+        repair_payload["contents"] = contents
+        data = await self._post_with_retries(repair_payload)
+        text = _extract_text(data)
+        if not text.strip():
+            raise ValueError("Gemini returned an empty repair response") from error
         return response_model.model_validate_json(_strip_json_fences(text))
+
+    async def _post_with_retries(self, payload: dict[str, Any]) -> dict[str, Any]:
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await self._post(payload)
+            except RuntimeError as exc:
+                last_error = exc
+                message = str(exc)
+                retryable = any(str(code) in message for code in _RETRY_STATUS)
+                if not retryable or attempt >= self.max_retries:
+                    raise
+                delay = 2**attempt
+                logger.warning(
+                    "Gemini retryable error (attempt %s/%s); sleeping %ss",
+                    attempt + 1,
+                    self.max_retries + 1,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+        assert last_error is not None
+        raise last_error
 
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         url = GEMINI_GENERATE_URL.format(model=self.model_name)
-        params = {"key": self.api_key}
+        headers = {"x-goog-api-key": self.api_key}
         client = self._http_client
         owns_client = client is None
         if owns_client:
-            client = httpx.AsyncClient(timeout=60.0)
+            client = httpx.AsyncClient(timeout=self.timeout_seconds)
         try:
-            response = await client.post(url, params=params, json=payload)
+            response = await client.post(url, headers=headers, json=payload)
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 detail = exc.response.text if exc.response is not None else str(exc)
-                raise RuntimeError(f"Gemini API error: {detail}") from exc
+                raise RuntimeError(
+                    f"Gemini API error ({exc.response.status_code}): {detail}"
+                ) from exc
             data = response.json()
         finally:
             if owns_client:
@@ -120,6 +213,10 @@ def _to_gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
         converted["required"] = schema["required"]
     if "items" in schema and isinstance(schema["items"], dict):
         converted["items"] = _to_gemini_schema(schema["items"])
+    # Gemini structured output rejects additionalProperties in some schemas.
+    if "$defs" in schema:
+        # Inline defs are already expanded by pydantic for top-level models we use.
+        pass
     return converted
 
 

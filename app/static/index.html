@@ -16,11 +16,38 @@
         </p>
         <form id="start-form">
           <label for="problem">Your problem</label>
-          <textarea id="problem" rows="7" required placeholder="Describe the problem…"></textarea>
-          <button type="submit" id="run-btn">Start debate</button>
+          <textarea id="problem" rows="6" required placeholder="Describe the problem…"></textarea>
+          <label for="max-rounds">Starting rounds</label>
+          <select id="max-rounds">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10">10</option>
+          </select>
+          <p class="hint-inline">Continue always adds 3 more rounds.</p>
+          <div class="btn-row">
+            <button type="submit" id="run-btn">Start debate</button>
+            <button type="button" id="stop-btn" class="ghost" disabled>Stop</button>
+          </div>
+          <button type="button" id="continue-btn" class="ghost continue" disabled>
+            Continue 3 more rounds
+          </button>
         </form>
         <p id="status-line" class="status">Waiting to start</p>
         <p id="round-pill" class="pill">No round yet</p>
+        <div id="score-trend" class="score-trend"></div>
+
+        <div class="history-block">
+          <div class="history-head">
+            <h3>Past sessions</h3>
+            <button type="button" id="refresh-sessions" class="linkish">Refresh</button>
+          </div>
+          <ul id="session-list" class="session-list"></ul>
+        </div>
       </aside>
 
       <main class="stage">

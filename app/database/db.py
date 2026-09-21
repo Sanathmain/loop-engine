@@ -44,7 +44,21 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+    _ensure_sqlite_columns(engine)
+
+
+def _ensure_sqlite_columns(engine: Engine) -> None:
+    if not str(engine.url).startswith("sqlite"):
+        return
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        rows = conn.execute(text("PRAGMA table_info(sessions)")).fetchall()
+        columns = {row[1] for row in rows}
+        if "best_round" not in columns:
+            conn.execute(text("ALTER TABLE sessions ADD COLUMN best_round INTEGER"))
 
 
 def get_db() -> Generator[Session, None, None]:

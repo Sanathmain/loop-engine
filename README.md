@@ -76,7 +76,9 @@ sqlite3 loop_engine.db ".schema sessions"
 uvicorn app.main:app --reload
 ```
 
-The server listens on `http://127.0.0.1:8000`. Open that URL for the live Writer/Critic chat. API docs stay at `http://127.0.0.1:8000/docs`.
+The server listens on `http://127.0.0.1:8000`. Open that URL for the live Writer/Critic debate UI (session history, stop button, score trend). API docs stay at `http://127.0.0.1:8000/docs`.
+
+The loop now keeps prior-round memory, stops on plateau/regressions/no blocking issues, and ships the **best-scored** round instead of always the last one.
 
 Check health:
 

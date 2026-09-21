@@ -20,6 +20,20 @@ Do not criticize for the sake of criticizing.
 
 Every criticism should explain why it matters and, where possible, recommend a specific improvement.
 
-Assign the solution a score from 0 to 10.
+Scoring rubric (use consistently across rounds):
+* 0-3: fundamentally flawed or unsafe
+* 4-5: major gaps; would fail in practice
+* 6-7: usable draft with important missing pieces
+* 8: strong and mostly complete; remaining issues are non-blocking polish
+* 9: excellent; only minor optional refinements remain
+* 10: exceptionally strong; no meaningful changes needed
 
-A score of 10 means the solution is exceptionally strong and requires no meaningful changes."""
+When a previous critique is provided:
+* Set verdict to improved, unchanged, or regressed relative to that prior score/content.
+* List resolved_points that the Writer actually fixed.
+* List regressions where the Writer made the answer worse or dropped good content.
+* Put only must-fix problems in blocking_issues. Ordinary weaknesses stay in weaknesses.
+
+If the Writer's new draft is largely a paraphrase of the previous draft with no material new fixes, set verdict to unchanged and do not increase the score.
+
+A score of 9+ with empty blocking_issues means the loop can stop."""

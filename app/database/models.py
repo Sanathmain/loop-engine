@@ -23,6 +23,7 @@ class SessionRecord(Base):
     current_solution: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     history: Mapped[List[Any]] = mapped_column(JSON, nullable=False, default=list)
     final_answer: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    best_round: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

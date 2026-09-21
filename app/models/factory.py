@@ -21,6 +21,7 @@ def create_model(settings: Settings) -> AIModel:
         return GeminiModel(
             api_key=settings.gemini_api_key,
             model_name=settings.gemini_model,
+            timeout_seconds=settings.gemini_timeout_seconds,
         )
     raise ValueError(
         f"Unknown MODEL_PROVIDER={settings.model_provider!r}. "

@@ -23,7 +23,14 @@ def _extract_problem(user_text: str) -> str:
     if marker not in user_text:
         return user_text.strip()
     remainder = user_text.split(marker, 1)[1]
-    for stop in ("\n\nPrevious solution:", "\n\nLatest critique:", "\n\nWriter solution:"):
+    for stop in (
+        "\n\nPrevious solution:",
+        "\n\nLatest critique:",
+        "\n\nWriter solution:",
+        "\n\nPrior rounds",
+        "\n\nRevision rules:",
+        "\n\nPrevious critique",
+    ):
         if stop in remainder:
             remainder = remainder.split(stop, 1)[0]
             break
@@ -37,6 +44,7 @@ class MockModel(AIModel):
         self.critic_scores = critic_scores or list(DEFAULT_CRITIC_SCORES)
         self._writer_call = 0
         self._critic_call = 0
+        self.last_call_stats: dict[str, Any] = {"duration_ms": 1, "tokens": 10}
 
     async def generate(
         self,
@@ -82,6 +90,7 @@ class MockModel(AIModel):
                 "Extra runner labor may not pay off on slow nights.",
             ]
             confidence = min(0.55 + 0.15 * (round_number - 1), 0.9)
+            rationale = "Revised against prior critique; remaining risks are adoption and labor cost."
         else:
             analysis = (
                 f"Initial analysis of: {problem} "
@@ -102,6 +111,7 @@ class MockModel(AIModel):
                 "Labor cost may rise without reducing wait.",
             ]
             confidence = 0.55
+            rationale = "Baseline draft; bottleneck is not yet measured."
 
         return WriterOutput(
             analysis=analysis,
@@ -109,13 +119,26 @@ class MockModel(AIModel):
             assumptions=assumptions,
             risks=risks,
             confidence=round(confidence, 2),
+            confidence_rationale=rationale,
         )
 
     def _critic_output(self, user_text: str) -> CriticOutput:
         index = min(self._critic_call, len(self.critic_scores) - 1)
         score = self.critic_scores[index]
+        previous_score = (
+            self.critic_scores[index - 1] if self._critic_call > 0 and index > 0 else None
+        )
         self._critic_call += 1
         problem = _extract_problem(user_text) or "the stated problem"
+
+        if previous_score is None:
+            verdict = "unchanged"
+        elif score > previous_score + 0.05:
+            verdict = "improved"
+        elif score < previous_score - 0.05:
+            verdict = "regressed"
+        else:
+            verdict = "unchanged"
 
         if score >= 9.0:
             return CriticOutput(
@@ -130,6 +153,10 @@ class MockModel(AIModel):
                 alternative_approaches=[],
                 recommended_changes=[],
                 score=score,
+                verdict=verdict,  # type: ignore[arg-type]
+                resolved_points=["Prior gaps were closed."] if previous_score else [],
+                regressions=[],
+                blocking_issues=[],
             )
 
         if self._critic_call == 1:
@@ -163,6 +190,12 @@ class MockModel(AIModel):
                     "Add a table-turn tactic, not only a queue tactic.",
                 ],
                 score=score,
+                verdict="unchanged",
+                resolved_points=[],
+                regressions=[],
+                blocking_issues=[
+                    "No baseline measurement before adding labor.",
+                ],
             )
 
         return CriticOutput(
@@ -194,4 +227,8 @@ class MockModel(AIModel):
                 "Run the trial across at least one weekday and one weekend peak.",
             ],
             score=score,
+            verdict=verdict,  # type: ignore[arg-type]
+            resolved_points=["Added measurement and review checkpoint."] if previous_score else [],
+            regressions=[] if verdict != "regressed" else ["Dropped useful earlier detail."],
+            blocking_issues=[],
         )

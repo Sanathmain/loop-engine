@@ -16,13 +16,57 @@ class CriticAgent(Agent):
             system_prompt=CRITIC_SYSTEM_PROMPT,
         )
 
-    async def review(self, problem: str, solution: WriterOutput) -> CriticOutput:
-        user_content = (
-            f"Problem:\n{problem}\n\n"
-            f"Writer solution:\n{solution.model_dump_json(indent=2)}"
-        )
+    async def review(
+        self,
+        problem: str,
+        solution: WriterOutput,
+        previous_critique: CriticOutput | None = None,
+        previous_score: float | None = None,
+        previous_solution: WriterOutput | None = None,
+        user_unsatisfied: bool = False,
+    ) -> CriticOutput:
+        parts = [
+            f"Problem:\n{problem}",
+            f"Writer solution:\n{solution.model_dump_json(indent=2)}",
+        ]
+        if previous_solution is not None:
+            parts.append(
+                "Previous Writer solution (compare for real change):\n"
+                + previous_solution.model_dump_json(indent=2)
+            )
+        if previous_critique is not None:
+            score = (
+                previous_score
+                if previous_score is not None
+                else previous_critique.score
+            )
+            parts.append(
+                "Previous critique (compare against this):\n"
+                + previous_critique.model_dump_json(indent=2)
+            )
+            parts.append(
+                f"Previous score: {score}\n"
+                "Set verdict to improved, unchanged, or regressed. "
+                "Fill resolved_points, regressions, and blocking_issues."
+            )
+        else:
+            parts.append(
+                "This is the first critique. Set verdict to unchanged, "
+                "leave resolved_points and regressions empty, and put only "
+                "must-fix problems in blocking_issues."
+            )
+
+        if user_unsatisfied:
+            parts.append(
+                "USER CONTINUATION MODE:\n"
+                "- The user was not satisfied with the prior answer.\n"
+                "- If this draft is mostly the same idea with cosmetic edits, "
+                "set verdict=unchanged and do NOT raise the score.\n"
+                "- Demand concrete new substance on open issues."
+            )
+
         result = await self.generate(
-            [{"role": "user", "content": user_content}],
+            [{"role": "user", "content": "\n\n".join(parts)}],
             response_model=CriticOutput,
         )
         if not isinstance(result, CriticOutput):

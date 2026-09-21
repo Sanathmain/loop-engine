@@ -13,6 +13,10 @@ class WriterOutput(BaseModel):
         le=1.0,
         description="Confidence from 0.0 to 1.0 (not a percentage).",
     )
+    confidence_rationale: str = Field(
+        default="",
+        description="Why this confidence is justified given known gaps.",
+    )
 
     @field_validator("confidence", mode="before")
     @classmethod
@@ -23,4 +27,3 @@ class WriterOutput(BaseModel):
         if number > 1.0:
             number = number / 100.0
         return max(0.0, min(number, 1.0))
-

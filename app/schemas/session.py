@@ -22,10 +22,27 @@ class HistoryItem(BaseModel):
     critic_response: CriticOutput
     revised_writer_response: WriterOutput | None = None
     timestamp: datetime
+    duration_ms: int | None = None
+    tokens: int | None = None
 
 
 class SessionCreate(BaseModel):
     problem: str = Field(min_length=1)
+    max_rounds: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description="Optional per-session round limit. Defaults to server MAX_ROUNDS.",
+    )
+
+
+class SessionContinue(BaseModel):
+    extra_rounds: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="How many additional Writer/Critic rounds to run.",
+    )
 
 
 class SessionRead(BaseModel):
@@ -37,6 +54,19 @@ class SessionRead(BaseModel):
     current_solution: WriterOutput | None = None
     history: list[HistoryItem] = Field(default_factory=list)
     final_answer: WriterOutput | None = None
+    best_round: int | None = None
+    created_at: datetime | None = None
+
+
+class SessionSummary(BaseModel):
+    id: str
+    problem: str
+    status: SessionStatus
+    current_round: int
+    max_rounds: int
+    best_score: float | None = None
+    best_round: int | None = None
+    created_at: datetime | None = None
 
 
 class LoopEventType(str, Enum):
